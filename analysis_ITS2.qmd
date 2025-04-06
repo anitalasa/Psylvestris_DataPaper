@@ -15,13 +15,16 @@ editor_options:
 ```{r}
 #| eval: false
 # Install required packages 
-
+if(!requireNamespace("BiocManager")){
+  install.packages("BiocManager")
+}
 BiocManager::install("phyloseq")
 install.packages("dplyr")
 install.packages("tidyverse")
 install.packages("ggplot2")
 install.packages("vegan")
 install.packages("purrr")
+install.packages("gdata")
 ```
 
 ```{r}
@@ -32,75 +35,75 @@ library(tidyverse)
 library(ggplot2)
 library(vegan)
 library(purrr)
+library(gdata)
 ```
 
 ## Load all the data 
 Load the ASV table (with the taxonomy and sequence counts)
+
 ```{r}
-data=read.table("ASV_final_ITS.txt", header = T, sep="\t")
+data=read.table("ASV_hongos_TODOS.txt", header = T, sep="\t")
 
 # we modify the taxonomy
-data$Kingdom <- gsub("k__", "", data$Kingdom)
-data$Phylum <- gsub("p__", "", data$Phylum)
-data$Class <- gsub("c__", "", data$Class)
-data$Order <- gsub("o__", "", data$Order)
-data$Family <- gsub("f__", "", data$Family)
-data$Genus <- gsub("g__", "", data$Genus)
-
-colnames_data <- colnames(data)
+data$Kingdom=gsub("k__", "",  data$Kingdom)
+data$Phylum=gsub("p__", "",  data$Phylum)
+data$Class=gsub("c__", "",  data$Class)
+data$Order=gsub("o__", "",  data$Order)
+data$Family=gsub("f__", "",  data$Family)
+data$Genus=gsub("g__", "",  data$Genus)
+colnames_data=colnames(data)
 
 # load the metadata describing the main characteristics of each sample
-mt <- read.table("metadatos.txt", sep = "\t", header = T)
-row.names(mt) <- mt$Sample
+mt=read.table("metadatos.txt",sep="\t", header=T)#load the metadata describing the main characteristics of each sample
+mt$Season_Condition=paste0(mt$Season,"_",mt$Condition)
+mt$Season_Site_Condition=paste0(mt$Site,"_",mt$Season_Condition)
 
-# select the columns where the bacterial taxonomy is indicated (From Phylum level to the ASV)
-tax <- data[, 2:8]
+row.names(mt)=mt$Sample
+
+tax =data[,2:8]#select the columns where the bacterial taxonomy is indicated (From Phylum level to the ASV)
 
 # select the columns where the number of sequences of each ASV in each sample is indicated
-ASV <- data[, 9:ncol(data)]
+ASV=data[,9:ncol(data)]
 
 # load the sequence of each ASV
-dna <- Biostrings::DNAStringSet(data$ASV_seqs)
-names(dna) <- data$ASV_names
+dna=Biostrings::DNAStringSet(data$ASV_seqs) #load the sequence of each ASV
+names(dna)= data$ASV_names
 
-row.names(tax) <- data$ASV_names
-row.names(ASV) <- data$ASV_names
-identical(rownames(ASV), rownames(tax)) # it should be TRUE
+row.names(tax)=data$ASV_names
+row.names(ASV)=data$ASV_names
+identical(rownames(ASV), rownames(tax))#it should be TRUE
 ```
 
 ## Create a Phyloseq object
 ```{r}
-phy_OTUtable <- otu_table(ASV, taxa_are_rows = TRUE)
-phy_taxonomy <- tax_table(as.matrix(tax))
-phy_metadata <- sample_data(mt)
+phy_OTUtable=otu_table(ASV, taxa_are_rows = T)
+phy_taxonomy=tax_table(as.matrix(tax))
+phy_metadata=sample_data(mt) 
 
-# Put everything into a phyloseq object
-phy_data_total <- phyloseq(phy_OTUtable, phy_taxonomy, phy_metadata)
+#Put everything into a phyloseq object
+phy_data_total=phyloseq(phy_OTUtable,phy_taxonomy,phy_metadata)
 
-# Check the number of samples included in each object
-nsamples(phy_OTUtable)
-sum(sample_names(phy_metadata) %in% sample_names(phy_OTUtable))
-nsamples(phy_metadata)
+#Check the number of samples included in each object
+nsamples(phy_OTUtable); nsamples(phy_metadata); nsamples(phy_metadata)
 ```
 
 ## First trimming of the dataset
 - Our dataset included samples obtained in spring and summer, samples coming from *P. sylvestris*, *P. pinaster* and *P. sylvestris* subsp. *nevadensis*. 
-- Here we only wanted the samples corresponding to *P. sylvestris* sampled in spring
+- Here we only wanted the samples corresponding to *P. sylvestris*
 
 ```{r}
-phy_data1 <- subset_samples(phy_data_total, Season != "Summer") # removal of summer samples
-phy_data2 <- subset_samples(phy_data1, Species == "Psylvestris") # selecting the plant host
+phy_data1=subset_samples(phy_data_total, Species == "Psylvestris")#selecting the plant host
 ```
 
 ```{r}
 # check the total number of sequences
-numsec <- as.data.frame(colSums(otu_table(phy_data2)))
-View(numsec) # it is convenient to order this table
+numsec=as.data.frame(colSums(otu_table(phy_data1)))
+View(numsec) #it is convenient to order this table
 ```
 
 ```{r}
 # export the table 
-write.table(data.frame(" " = rownames(numsec), numsec), file = "NumberofWorkingSequences.txt", sep = "\t", row.names = FALSE)
+write.table(data.frame(" "=rownames(numsec),numsec),file="NumberofWorkingSequences_ITS.txt", sep="\t",row.names =F)
 
 ```
 
@@ -108,422 +111,778 @@ write.table(data.frame(" " = rownames(numsec), numsec), file = "NumberofWorkingS
 ## Subset samples
 - We want to separate the data by mountainous area under study and by plant compartment
 ```{r}
-Almijara <- subset_samples(phy_data2, Site == "Almijara")
-Almijara <- prune_taxa(taxa_sums(Almijara) > 0.0, Almijara)
+Almijara=subset_samples(phy_data1, Site=="Almijara" )
+Almijara=prune_taxa(taxa_sums(Almijara)>0.0, Almijara)
 
-Almijara_rizo <- subset_samples(Almijara, Compartment == "Rhizosphere")
-Almijara_rizo <- prune_taxa(taxa_sums(Almijara_rizo) > 0.0, Almijara_rizo)
+Almijara_rizo=subset_samples(Almijara, Compartment=="Rhizosphere" )
+Almijara_rizo=prune_taxa(taxa_sums(Almijara_rizo)>0.0, Almijara_rizo)
 
-Almijara_endo <- subset_samples(Almijara, Compartment == "Endosphere")
-Almijara_endo <- prune_taxa(taxa_sums(Almijara_endo) > 0.0, Almijara_endo)
+Almijara_endo=subset_samples(Almijara, Compartment=="Endosphere" )
+Almijara_endo=prune_taxa(taxa_sums(Almijara_endo)>0.0, Almijara_endo)
 
-Baza <- subset_samples(phy_data2, Site == "Baza")
-Baza <- prune_taxa(taxa_sums(Baza) > 0.0, Baza)
+Baza=subset_samples(phy_data1, Site=="Baza")
+Baza=prune_taxa(taxa_sums(Baza)>0.0, Baza)
 
-Baza_rizo <- subset_samples(Baza, Compartment == "Rhizosphere")
-Baza_rizo <- prune_taxa(taxa_sums(Baza_rizo) > 0.0, Baza_rizo)
+Baza_rizo=subset_samples(Baza, Compartment=="Rhizosphere" )
+Baza_rizo=prune_taxa(taxa_sums(Baza_rizo)>0.0, Baza_rizo)
 
-Baza_endo <- subset_samples(Baza, Compartment == "Endosphere")
-Baza_endo <- prune_taxa(taxa_sums(Baza_endo) > 0.0, Baza_endo)
+Baza_endo=subset_samples(Baza, Compartment=="Endosphere" )
+Baza_endo=prune_taxa(taxa_sums(Baza_endo)>0.0, Baza_endo)
 
-Nevada <- subset_samples(phy_data2, Site == "SierraNevada")
-Nevada <- prune_taxa(taxa_sums(Nevada) > 0.0, Nevada)
+Nevada=subset_samples(phy_data1, Site=="SierraNevada")
+Nevada=prune_taxa(taxa_sums(Nevada)>0.0, Nevada)
 
-Nevada_rizo <- subset_samples(Nevada, Compartment == "Rhizosphere")
-Nevada_rizo <- prune_taxa(taxa_sums(Nevada_rizo) > 0.0, Nevada_rizo)
+Nevada_rizo=subset_samples(Nevada, Compartment=="Rhizosphere" )
+Nevada_rizo=prune_taxa(taxa_sums(Nevada_rizo)>0.0, Nevada_rizo)
 
-Nevada_endo <- subset_samples(Nevada, Compartment == "Endosphere")
-Nevada_endo <- prune_taxa(taxa_sums(Nevada_endo) > 0.0, Nevada_endo)
+Nevada_endo=subset_samples(Nevada, Compartment=="Endosphere" )
+Nevada_endo=prune_taxa(taxa_sums(Nevada_endo)>0.0, Nevada_endo)
 
-rizo <- subset_samples(phy_data2, Compartment == "Rhizosphere")
-rizo <- prune_taxa(taxa_sums(rizo) > 0.0, rizo)
+rizo=subset_samples(phy_data1, Compartment=="Rhizosphere" )
+rizo=prune_taxa(taxa_sums(rizo)>0.0, rizo)
 
-endo <- subset_samples(phy_data2, Compartment == "Endosphere")
-endo <- prune_taxa(taxa_sums(endo) > 0.0, endo)
+endo=subset_samples(phy_data1, Compartment=="Endosphere" )
+endo=prune_taxa(taxa_sums(endo)>0.0, endo)
 ```
 
 ## Rarefaction curves
 ### Almijara (Rhizosphere)
 ```{r}
 # 1.Almijara Rhizosphere..........................................
-mt <- as.data.frame(sample_data(Almijara_rizo))[order(as.character(rownames(as.data.frame(sample_data(Almijara_rizo)))), decreasing = FALSE), ] # save the metadata of this sub-dataset
-otu <- otu_table(Almijara_rizo) # save the ASV table of this sub-dataset
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Almijara_rizo))[order(as.character(rownames(as.data.frame(sample_data(Almijara_rizo)))),decreasing=F),]#save the metadata of this sub-dataset
+otu = otu_table(Almijara_rizo)#save the ASV table of this sub-dataset
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition) # prepare the data for a better plotting. Condition= "Symptomatic" and "Asymptomatic"
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt) #it should be TRUE
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)#prepare the data for a better plotting. Condition= "Symptomatic" and "Asymptomatic"
+sample_names = rownames(otu)
 
-out <- rarecurve(otu, step = 100, label = FALSE) # rarefaction itself
-rare <- lapply(out, function(x) { # create a table from the rarefaction
-  b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+out = rarecurve(otu, step = 100, label = F) #rarefaction itself
+rare = lapply(out, function(x){  #create a table from the rarefaction
+  b = as.data.frame(x)
+  b = data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
-names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
-  z <- data.frame(x)
+names(rare) = sample_names
+rare = map_dfr(rare, function(x){
+  z= data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample # data preparation for the plotting
-rare$Condition <- gsub(".*/", "", rare$Condition) # remove all the characters before "/"
-rare$raw.read <- as.numeric(rare$raw.read)
-# Esto que acabamos de hacer solo vale para las muestras en concreto que tengo ahora
+rare$Season_Condition=rare$Sample #data preparation for the plotting
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)#remove all the characters before "/"
+rare$raw.read=as.numeric(rare$raw.read)
 ```
 
 ```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) + # coloring by condition of the trees
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), linewidth = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "black", "Asymptomatic" = "#3399FF")) + # specific colors
-  scale_color_manual(
-    values = c("Symptomatic" = "black", "Asymptomatic" = "#3399FF"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra de Almijara (Rhizosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
-
-p
+p_ar=ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +#coloring by condition of the trees
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition),linewidth=1.2)+
+  scale_fill_manual(values = c("Spring_Asymptomatic"="#3399FF","Summer_Asymptomatic"="deepskyblue"))+#specific colors
+  scale_color_manual(values = c("Spring_Asymptomatic"="#3399FF", "Summer_Asymptomatic"="deepskyblue"),
+                     name="Season",
+                     breaks=c("Spring_Asymptomatic", "Summer_Asymptomatic"),
+                     labels=c("Spring", "Summer"))+
+  labs(title= "Sierra de Almijara (Rhizosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_ar
 ```
 
 
 ```{r}
 # save the plot as .tiff
-ggsave(filename = "Rarefacc_rizo_Almijara_SciData_Fungi.tiff", plot = p, device = tiff(), width = 18, height = 16, units = "cm", dpi = 800)
-rare <- NULL
+ggsave(filename = "Rarefacc_rizo_Almijara_SciData_ITS.tiff", plot = p_ar,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+rare=NULL
 ```
 
 ### Almijara (Endosphere)
 
 ```{r}
-mt <- as.data.frame(sample_data(Almijara_endo))[order(as.character(rownames(as.data.frame(sample_data(Almijara_endo)))), decreasing = FALSE), ]
-otu <- otu_table(Almijara_endo)
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Almijara_endo))[order(as.character(rownames(as.data.frame(sample_data(Almijara_endo)))),decreasing=F),]
+otu = otu_table(Almijara_endo)
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition)
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt) 
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)
+sample_names = rownames(otu)
 
-out <- rarecurve(otu, step = 100, label = FALSE)
-rare <- lapply(out, function(x) {
-  b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+out = rarecurve(otu, step = 100, label = F) 
+rare = lapply(out, function(x){  
+  b = as.data.frame(x)
+  b = data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
 names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
-  z <- data.frame(x)
+rare = map_dfr(rare, function(x){
+  z = data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample
-rare$Condition <- gsub(".*/", "", rare$Condition)
-rare$raw.read <- as.numeric(rare$raw.read)
+rare$Season_Condition=rare$Sample
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)
+rare$raw.read=as.numeric(rare$raw.read)
 ```
 
 
 ```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) +
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), size = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "black", "Asymptomatic" = "deepskyblue")) +
-  scale_color_manual(
-    values = c("Symptomatic" = "black", "Asymptomatic" = "deepskyblue"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra de Almijara (Endosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
-
-p
+p_ae=ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition), linewidth =1.2)+
+  scale_fill_manual(values = c("Spring_Asymptomatic"="#3399FF","Summer_Asymptomatic"="deepskyblue"))+#specific colors
+  scale_color_manual(values = c("Spring_Asymptomatic"="#3399FF", "Summer_Asymptomatic"="deepskyblue"),
+                     name="Season",
+                     breaks=c("Spring_Asymptomatic", "Summer_Asymptomatic"),
+                     labels=c("Spring", "Summer"))+
+  labs(title= "Sierra de Almijara (Endosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_ae
 ```
 
 ```{r}
 # save the plot as .tiff
-ggsave(filename = "Rarefacc_Almijara_endo_SciData_fungi.tiff", plot = p, device = tiff(), width = 18, height = 16, units = "cm", dpi = 800)
-rare <- NULL
+ggsave(filename = "Rarefacc_Almijara_endo_SciData_ITS.tiff", plot = p_ae,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+rare=NULL
 ```
 
 ### Baza (Rhizosphere)
 ```{r}
-mt <- as.data.frame(sample_data(Baza_rizo))[order(as.character(rownames(as.data.frame(sample_data(Baza_rizo)))), decreasing = FALSE), ]
-otu <- otu_table(Baza_rizo)
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Baza_rizo))[order(as.character(rownames(as.data.frame(sample_data(Baza_rizo)))),decreasing=F),]
+otu = otu_table(Baza_rizo)
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition)
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt) 
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)
+sample_names = rownames(otu)
 
-out <- rarecurve(otu, step = 100, label = FALSE)
-rare <- lapply(out, function(x) {
-  b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+out = rarecurve(otu, step = 100, label = F) 
+rare = lapply(out, function(x){  
+  b = as.data.frame(x)
+  b = data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
 names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
-  z <- data.frame(x)
+rare = map_dfr(rare, function(x){
+  z = data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample
-rare$Condition <- gsub(".*/", "", rare$Condition)
-rare$raw.read <- as.numeric(rare$raw.read)
-```
+rare$Season_Condition=rare$Sample
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)
+rare$raw.read=as.numeric(rare$raw.read)
 
-```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) +
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), size = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "#66CC33", "Asymptomatic" = "#66CC33")) +
-  scale_color_manual(
-    values = c("Symptomatic" = "#66CC33", "Asymptomatic" = "#66CC33"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra de Baza (Rhizosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
 
-p
+p_br=ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition),size=1.2)+
+  scale_fill_manual(values = c("Spring_Symptomatic"="#66CC33","Summer_Symptomatic"="green"))+
+  scale_color_manual(values = c("Spring_Symptomatic"="#66CC33", "Summer_Symptomatic"="green"),
+                     name="Season",
+                     breaks=c("Spring_Symptomatic", "Summer_Symptomatic"),
+                     labels=c("Spring", "Summer"))+
+  labs(title= "Sierra de Baza (Rhizosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_br
 ```
 
 ```{r}
 # save the plot as .tiff
-ggsave(filename = "Rarefacc_Baza_Rizo_SciData_fungi.tiff", plot = p,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+ggsave(filename = "Rarefacc_Baza_Rizo_SciData_ITS.tiff", plot = p_br,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
 rare=NULL
 ```
 
 ### Baza (Endosphere)
 ```{r}
-mt <- as.data.frame(sample_data(Baza_endo))[order(as.character(rownames(as.data.frame(sample_data(Baza_endo)))), decreasing = FALSE), ]
-otu <- otu_table(Baza_endo)
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Baza_endo))[order(as.character(rownames(as.data.frame(sample_data(Baza_endo)))),decreasing=F),]
+otu = otu_table(Baza_endo)
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition)
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt) 
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)
+sample_names = rownames(otu)
 
-out <- rarecurve(otu, step = 100, label = F)
-rare <- lapply(out, function(x) {
+out <- rarecurve(otu, step = 100, label = F) 
+rare <- lapply(out, function(x){  
   b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+  b <- data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
 names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
+rare <- map_dfr(rare, function(x){
   z <- data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample
-rare$Condition <- gsub(".*/", "", rare$Condition)
-rare$raw.read <- as.numeric(rare$raw.read)
+rare$Season_Condition=rare$Sample 
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)
+rare$raw.read=as.numeric(rare$raw.read)
 ```
 
 ```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) +
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), size = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "green", "Asymptomatic" = "#3399FF")) +
-  scale_color_manual(
-    values = c("Symptomatic" = "green", "Asymptomatic" = "#3399FF"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra de Baza (Endosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
-p
+p_be<-ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition),size=1.2)+
+  scale_fill_manual(values = c("Spring_Symptomatic"="#66CC33","Summer_Symptomatic"="green"))+
+  scale_color_manual(values = c("Spring_Symptomatic"="#66CC33", "Summer_Symptomatic"="green"),
+                     name="Condition",
+                     breaks=c("Spring_Symptomatic", "Summer_Symptomatic"),
+                     labels=c("Spring", "Summer"))+
+  labs(title= "Sierra de Baza (Endosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_be
 ```
 
 ```{r}
 # save the plot as .tiff
-ggsave(filename = "Rarefacc_Baza_Rizo_SciData_fungi.tiff", plot = p, device = tiff(), width = 18, height = 16, units = "cm", dpi = 800)
-rare <- NULL
+ggsave(filename = "Rarefacc_Baza_endosphere_SciData_ITS.tiff", plot = p_be,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+rare=NULL
 ```
 
 
 ### Sierra Nevada (Rhizosphere)
 
 ```{r}
-mt <- as.data.frame(sample_data(Nevada_rizo))[order(as.character(rownames(as.data.frame(sample_data(Nevada_rizo)))), decreasing = F), ]
-otu <- otu_table(Nevada_rizo)
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Nevada_rizo))[order(as.character(rownames(as.data.frame(sample_data(Nevada_rizo)))),decreasing=F),]
+otu = otu_table(Nevada_rizo)
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition)
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt)
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)
+sample_names = rownames(otu)
 
-out <- rarecurve(otu, step = 100, label = F)
-rare <- lapply(out, function(x) {
+out <- rarecurve(otu, step = 100, label = F) 
+rare <- lapply(out, function(x){  
   b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+  b <- data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
 names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
+rare <- map_dfr(rare, function(x){
   z <- data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample
-rare$Condition <- gsub(".*/", "", rare$Condition)
-rare$raw.read <- as.numeric(rare$raw.read)
+rare$Season_Condition=rare$Sample 
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)
+rare$raw.read=as.numeric(rare$raw.read)
 ```
 
 ```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) +
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), size = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "black", "Asymptomatic" = "magenta")) +
-  scale_color_manual(
-    values = c("Symptomatic" = "black", "Asymptomatic" = "magenta"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra Nevada (Rhizosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
-p
+p_nr<-ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition),size=1.2)+
+  scale_fill_manual(values = c("Spring_Symptomatic"="black","Summer_Symptomatic"="grey",
+                               "Spring_Asymptomatic"="magenta","Summer_Asymptomatic"="pink"))+
+  scale_color_manual(values = c("Spring_Symptomatic"="black","Summer_Symptomatic"="grey",
+                                "Spring_Asymptomatic"="magenta","Summer_Asymptomatic"="pink"),
+                     name="Season and Condition",
+                     breaks=c("Spring_Symptomatic","Summer_Symptomatic",
+                              "Spring_Asymptomatic","Summer_Asymptomatic"),
+                     labels=c("Spring (Symptomatic)", "Summer (Symptomatic)",
+                              "Spring (Asymptomatic)", "Summer (Asymptomatic)"))+
+  labs(title= "Sierra Nevada (Rhizosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_nr
 ```
 
 ```{r}
-ggsave(filename = "Rarefacc_SNevada_Rizo_SciData_fungi.tiff", plot = p, device = tiff(), width = 18, height = 16, units = "cm", dpi = 800)
-rare <- NULL
+ggsave(filename = "Rarefacc_SNevada_Rizo_SciData_ITS.tiff", plot = p_nr,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+rare=NULL
 ```
 
 
 ### Sierra Nevada (Endosphere)
 ```{r}
-mt <- as.data.frame(sample_data(Nevada_endo))[order(as.character(rownames(as.data.frame(sample_data(Nevada_endo)))), decreasing = F), ]
-otu <- otu_table(Nevada_endo)
-otu <- as.data.frame(t(otu))
-otu <- otu[order(as.character(rownames(otu)), decreasing = FALSE), ]
+mt=as.data.frame(sample_data(Nevada_endo))[order(as.character(rownames(as.data.frame(sample_data(Nevada_endo)))),decreasing=F),]
+otu = otu_table(Nevada_endo)
+otu = as.data.frame(t(otu))
+otu=otu[order(as.character(rownames(otu)),decreasing=FALSE),]
 
-rownames(otu) == rownames(mt)
-rownames(otu) <- paste0(rownames(otu), "/", mt$Condition)
-sample_names <- rownames(otu)
+rownames(otu)==rownames(mt) 
+rownames(otu)=paste0(rownames(otu),"/",mt$Season_Condition)
+sample_names = rownames(otu)
 
 out <- rarecurve(otu, step = 100, label = F)
-rare <- lapply(out, function(x) {
+rare <- lapply(out, function(x){  
   b <- as.data.frame(x)
-  b <- data.frame(ASV = b[, 1], raw.read = rownames(b))
-  b$raw.read <- as.numeric(gsub("N", "", b$raw.read))
+  b <- data.frame(ASV = b[,1], raw.read = rownames(b))
+  b$raw.read <- as.numeric(gsub("N", "",  b$raw.read))
   return(b)
 })
 
 names(rare) <- sample_names
-rare <- map_dfr(rare, function(x) {
+rare <- map_dfr(rare, function(x){
   z <- data.frame(x)
   return(z)
 }, .id = "Sample")
 
-rare$Condition <- rare$Sample
-rare$Condition <- gsub(".*/", "", rare$Condition)
-rare$raw.read <- as.numeric(rare$raw.read)
+rare$Season_Condition=rare$Sample 
+rare$Season_Condition=gsub(".*/", "", rare$Season_Condition)
+rare$raw.read=as.numeric(rare$raw.read)
 ```
 
 
 ```{r}
-p <- ggplot(rare, aes(x = raw.read, y = ASV, colour = Condition, group = Sample)) +
-  theme_bw() +
-  geom_point(aes(colour = Condition), size = 0.85) +
-  geom_line(aes(colour = Condition), size = 1.2) +
-  scale_fill_manual(values = c("Symptomatic" = "black", "Asymptomatic" = "pink")) +
-  scale_color_manual(
-    values = c("Symptomatic" = "black", "Asymptomatic" = "pink"),
-    name = "Condition",
-    breaks = c("Symptomatic", "Asymptomatic"),
-    labels = c("Symptomatic", "Asymptomatic")
-  ) +
-  labs(title = "Sierra Nevada (Endosphere)", x = "Number of sequences", y = "Number of ASV") +
-  guides(alpha = FALSE) +
-  theme(
-    legend.key = element_blank(),
-    legend.title.align = 0.85,
-    legend.title = element_text(face = "bold", size = 14),
-    axis.text = element_text(size = 14),
-    axis.title = element_text(size = 16),
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
-    legend.text = element_text(size = 16)
-  )
-
-p
+p_ne<-ggplot(rare, aes(x=raw.read, y=ASV, colour=Season_Condition, group=Sample)) +
+  theme_bw()+
+  geom_point(aes(colour=Season_Condition), size=0.85)+
+  geom_line(aes(colour=Season_Condition),size=1.2)+
+  scale_fill_manual(values = c("Spring_Symptomatic"="black","Summer_Symptomatic"="grey",
+                               "Spring_Asymptomatic"="magenta","Summer_Asymptomatic"="pink"))+
+  scale_color_manual(values = c("Spring_Symptomatic"="black","Summer_Symptomatic"="grey",
+                                "Spring_Asymptomatic"="magenta","Summer_Asymptomatic"="pink"),
+                     name="Season and Condition",
+                     breaks=c("Spring_Symptomatic","Summer_Symptomatic",
+                              "Spring_Asymptomatic","Summer_Asymptomatic"),
+                     labels=c("Spring (Symptomatic)", "Summer (Symptomatic)",
+                              "Spring (Asymptomatic)", "Summer (Asymptomatic)"))+
+  labs(title= "Sierra Nevada (Endosphere)", x="Number of sequences", y="Number of ASV")+
+  guides(alpha=FALSE)+
+  theme(legend.key=element_blank(),
+        legend.title.align = 0.85,
+        legend.title = element_text(face="bold",size=14),
+        axis.text = element_text(size=14),
+        axis.title = element_text(size = 16),
+        plot.title = element_text(hjust=0.5, face="bold", size=16),
+        legend.text = element_text(size = 16))
+x11()
+p_ne
 ```
 
 ```{r}
-ggsave(filename = "Rarefacc_SNevada_endo_SciData_fungi.tiff", plot = p, device = tiff(), width = 18, height = 16, units = "cm", dpi = 800)
-rare <- NULL
+ggsave(filename = "Rarefacc_SNevada_endo_SciData_ITS.tiff", plot = p_ne,device = tiff(),width = 18, height = 16, units = "cm", dpi = 800)
+rare=NULL
 ```
 
+## Taxonomical profiles
 
+Let's construct a bar plot indicating the mean relative abundance of each taxa in each groups of samples
+Firstly, we have to calculate the relative abundances:
+
+```{r}
+phy_relabun=transform_sample_counts(phy_data1, function(x){x/sum(x)}*100)#transform data to relative abundance
+```
+
+We will create two different plots, each one at one taxonomical level: Phylum and genera
+
+### Phylum level
+
+```{r}
+#Preparation of the plots:
+
+phylum_relabun=tax_glom(phy_relabun, taxrank = "Phylum")#collapse to phylum level
+df_melt_phylum= psmelt(physeq = phylum_relabun) #transform the phyloseq object into a dataframe
+colnames(df_melt_phylum) # check the content of the dataframe
+
+df_melt_aggreg1 = aggregate(df_melt_phylum$Abundance, 
+                            by=list(Group=df_melt_phylum$Season_Site_Condition, 
+                                    Sample=df_melt_phylum$Sample,Compartment=df_melt_phylum$Compartment,
+                                    Phylum=df_melt_phylum$Phylum), FUN=sum)
+colnames(df_melt_aggreg1)=c("Group", "Sample", "Compartment","Phylum","Abundance")
+colnames(df_melt_aggreg1) #check the content again
+
+df_melt_aggreg_mean = aggregate(df_melt_aggreg1$Abundance, by=list(Group=df_melt_aggreg1$Group, Compartment=df_melt_aggreg1$Compartment,
+                                                                   Phylum=df_melt_aggreg1$Phylum), FUN=mean)#calculate the mean by group of samples
+colnames(df_melt_aggreg_mean)<-c("Group", "Compartment","Phylum","Abundance")
+colnames(df_melt_aggreg_mean)
+
+df_melt_aggreg_sd=aggregate(df_melt_aggreg1$Abundance, by=list(Group=df_melt_aggreg1$Group, Compartment=df_melt_aggreg1$Compartment,
+                                                               Phylum=df_melt_aggreg1$Phylum), FUN=sd)#calculate the standard deviation of each group of samples
+colnames(df_melt_aggreg_sd)=c("Group", "Compartment","Phylum","sd")
+
+#Check whether  the group of samples and the name of the phyla are the same between the table with the mean values and sd
+all(df_melt_aggreg_mean$Group==df_melt_aggreg_sd$Group)
+all(df_melt_aggreg_mean$Phylum==df_melt_aggreg_sd$Phylum)
+
+#Add the standard deviation to the mean table
+df_melt_aggreg_mean$sd=df_melt_aggreg_sd$sd 
+
+media_sd_phylum_todos=df_melt_aggreg_mean
+
+#a.1) Endosphere
+media_sd_phylum_Endo=media_sd_phylum_todos[media_sd_phylum_todos[,"Compartment"] == "Endosphere",]
+
+media_sd_phylum_Endo$Phylum=as.character(media_sd_phylum_Endo$Phylum)
+unclassified_endo=media_sd_phylum_Endo[media_sd_phylum_Endo[,"Phylum"] == "unclassified",] #retain the unclassifed phyla
+media_sd_phylum_Endo=media_sd_phylum_Endo[media_sd_phylum_Endo[,"Phylum"] != "unclassified",] #remove the unclassified phyla from the table
+media_sd_phylum_Endo$Phylum[media_sd_phylum_Endo$Abundance <= 1.0] = "Other phyla (<1%)" #group altogether the minor phyla
+media_sd_phylum_Endo$Phylum=as.factor(media_sd_phylum_Endo$Phylum)
+
+others_endo=media_sd_phylum_Endo[media_sd_phylum_Endo[,"Phylum"] == "Other phyla (<1%)",]#retain minor phyla
+media_sd_phylum_Endo=media_sd_phylum_Endo[media_sd_phylum_Endo[,"Phylum"] != "Other phyla (<1%)",]#remove minor phyla
+
+ordenado_endo=media_sd_phylum_Endo[order(media_sd_phylum_Endo$Abundance, decreasing=T),] #order by abundance
+ordenado_endo=rbind(ordenado_endo,others_endo,unclassified_endo)#add the unclassified and minor phyla to the table
+
+group_label_endo=c("ASH\n(Spring)","ASH\n(Summer)", "BSD\n(Spring)","BSD\n(Summer)",
+                   "NSH\n(Spring)","NSH\n(Summer)","NSD\n(Spring)","NSD\n(Summer)")
+levels_endo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+limits_endo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+phyl_name_ordered_endo=as.vector(ordenado_endo$Phylum)
+nombres_unicos_endo=unique(phyl_name_ordered_endo)
+
+ordenado_endo$Phylum=reorder.factor(ordenado_endo$Phylum,new.order=rev(nombres_unicos_endo))#order 
+lab_unicos_endo=nombres_unicos_endo #this is for the legend
+
+sorted_labels_ggplot_endo <- sapply(lab_unicos_endo,
+                                    function(x) if (x == "Other phyla (<1%)"|x == "unclassified"|x == "Other genera (<1%)")
+                                    {parse(text=paste0("'", as.character(x), "'"))} else {parse(text = paste0("italic('",as.character(x), "')"))})
+#useful to write the name of the phyla in italics and the artificial groups "unclassified" and "minor phyla" not in italics
+
+colores_endo = c("#0099FF","#00CC00","grey","black")
+
+length(lab_unicos_endo)==length(colores_endo) #if false, check the number oh phyla and correct the colors accordingly
+length(lab_unicos_endo)
+length(colores_endo)
+
+titulo_plot_endo="Endosphere"
+
+phylum_endo_bar=ggplot(ordenado_endo, aes(x=Group, y=Abundance, fill=Phylum, order=Phylum)) + geom_bar(stat="identity", position="stack")+
+  scale_fill_manual(values=colores_endo,
+                    labels=sorted_labels_ggplot_endo,
+                    breaks=nombres_unicos_endo)+
+  labs(y="Mean relative abundance (%)", x=NULL, fill="Phylum",title=titulo_plot_endo)+
+  guides(fill = guide_legend(reverse = TRUE))+
+  scale_x_discrete(limits=limits_endo,labels=group_label_endo,
+                   breaks=levels_endo)+
+  scale_y_continuous(expand=c(0.01,0.01),
+                     breaks=c(0,10,20,30,40,50,60,70,80,90,100),
+                     labels=c("0","10", "20","30","40","50","60","70","80","90","100"),
+                     limits = c(NA, 100))+
+  theme_bw()+
+  theme(panel.border = element_rect(colour="black"))+
+  theme(axis.title.x=element_blank())+
+  theme(plot.title = element_text(face="bold", hjust = 0.5, size=7))+
+  theme(axis.text = element_text(size = 5))+
+  theme(axis.text.x = element_text(face="bold", size=5))+
+  theme(axis.title.y = element_text(size = 7))+
+  theme(legend.key.size = unit(0.2, "cm"))+
+  theme(legend.text = element_text(size = 5))+
+  theme(legend.title = element_text(size=7, face="bold"))+
+  theme(legend.title.align=0)+
+  theme(legend.text.align = 0)+
+  theme(legend.position = "right")
+
+x11()
+phylum_endo_bar
+ggsave("Phylum_barrasapiladas_endo_ITS.tiff", phylum_endo_bar,width = 80, height = 60, units = "mm", dpi = 800 )#Ajustar bien el ancho y largo
+ggsave("Phylum_barrasapiladas_endo_leyenda_ITS.tiff", phylum_endo_bar,width = 170, height = 60, units = "mm", dpi = 800 )#Ajustar bien el ancho y largo
+
+# a.2) RHIZOSPHERE
+media_sd_phylum_rizo=media_sd_phylum_todos[media_sd_phylum_todos[,"Compartment"] == "Rhizosphere",]
+
+media_sd_phylum_rizo$Phylum=as.character(media_sd_phylum_rizo$Phylum)
+unclassified_rizo=media_sd_phylum_rizo[media_sd_phylum_rizo[,"Phylum"] == "unclassified",] 
+media_sd_phylum_rizo=media_sd_phylum_rizo[media_sd_phylum_rizo[,"Phylum"] != "unclassified",] 
+
+media_sd_phylum_rizo$Phylum[media_sd_phylum_rizo$Abundance <= 1.0] = "Other phyla (<1%)" 
+media_sd_phylum_rizo$Phylum=as.factor(media_sd_phylum_rizo$Phylum)
+
+others_rizo=media_sd_phylum_rizo[media_sd_phylum_rizo[,"Phylum"] == "Other phyla (<1%)",]
+media_sd_phylum_rizo=media_sd_phylum_rizo[media_sd_phylum_rizo[,"Phylum"] != "Other phyla (<1%)",]
+
+ordenado_rizo=media_sd_phylum_rizo[order(media_sd_phylum_rizo$Abundance, decreasing=T),] 
+ordenado_rizo=rbind(ordenado_rizo,others_rizo,unclassified_rizo)
+
+group_label_rizo=c("ASH\n(Spring)","ASH\n(Summer)", "BSD\n(Spring)","BSD\n(Summer)",
+                   "NSH\n(Spring)","NSH\n(Summer)","NSD\n(Spring)","NSD\n(Summer)")
+levels_rizo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+limits_rizo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+phyl_name_ordered_rizo=as.vector(ordenado_rizo$Phylum)
+nombres_unicos_rizo=unique(phyl_name_ordered_rizo)
+
+ordenado_rizo$Phylum=reorder.factor(ordenado_rizo$Phylum,new.order=rev(nombres_unicos_rizo))
+lab_unicos_rizo=nombres_unicos_rizo 
+
+sorted_labels_ggplot_rizo <- sapply(lab_unicos_rizo,
+                                    function(x) if (x == "Other phyla (<1%)"|x == "unclassified"|x == "Other genera (<1%)")
+                                    {parse(text=paste0("'", as.character(x), "'"))} else {parse(text = paste0("italic('",as.character(x), "')"))})
+
+colores_rizo = c("#00CC00","#0099FF","magenta","orange",
+                 "grey", "black")
+
+length(lab_unicos_rizo)==length(colores_rizo) 
+length(lab_unicos_rizo)
+length(colores_rizo)
+
+titulo_plot_rizo="Rhizosphere"
+
+phylum_rizo_bar=ggplot(ordenado_rizo, aes(x=Group, y=Abundance, fill=Phylum, order=Phylum)) + geom_bar(stat="identity", position="stack")+
+  scale_fill_manual(values=colores_rizo,
+                    labels=sorted_labels_ggplot_rizo,
+                    breaks=nombres_unicos_rizo)+
+  labs(y="Mean relative abundance (%)", x=NULL, fill="Phylum",title=titulo_plot_rizo)+
+  guides(fill = guide_legend(reverse = TRUE))+
+  scale_x_discrete(limits=limits_rizo,labels=group_label_rizo,
+                   breaks=levels_rizo)+
+  theme_bw()+
+  theme(panel.border = element_rect(colour="black"))+
+  theme(axis.title.x=element_blank())+
+  theme(plot.title = element_text(face="bold", hjust = 0.5, size=7))+
+  theme(axis.text = element_text(size = 5))+
+  theme(axis.text.x = element_text(face="bold", size=5))+
+  theme(axis.title.y = element_text(size = 7))+
+  theme(legend.key.size = unit(0.2, "cm"))+
+  theme(legend.text = element_text(size = 5))+
+  theme(legend.title = element_text(size=7, face="bold"))+
+  theme(legend.title.align=0)+
+  theme(legend.text.align = 0)+
+  theme(legend.position = "right")
+
+x11()
+phylum_rizo_bar
+ggsave("Phylum_barrasapiladas_rizo_ITS.tiff", phylum_rizo_bar,width = 80, height = 60, units = "mm", dpi = 800 )
+ggsave("Phylum_barrasapiladas_rizo_leyenda_ITS.tiff", phylum_rizo_bar,width = 170, height = 60, units = "mm", dpi = 800 )
+```
+
+### Genus level
+
+```{r}
+genus_relabun=tax_glom(phy_relabun, taxrank = "Genus")#Collapse at Genus level
+df_melt_genus = psmelt(physeq = genus_relabun) #melt the phyloseq to a dataframe
+colnames(df_melt_genus)
+
+df_melt_aggreg2 = aggregate(df_melt_genus$Abundance, 
+                            by=list(Group=df_melt_genus$Season_Site_Condition, 
+                                    Sample=df_melt_genus$Sample,Genus=df_melt_genus$Genus,
+                                    Compartment=df_melt_genus$Compartment), FUN=sum)
+colnames(df_melt_aggreg2)=c("Group", "Sample", "Genus","Compartment","Abundance")
+colnames(df_melt_aggreg2)
+
+df_melt_aggreg_mean = aggregate(df_melt_aggreg2$Abundance, by=list(Group=df_melt_aggreg2$Group, 
+                                                                   Genus=df_melt_aggreg2$Genus,
+                                                                   Compartment=df_melt_aggreg2$Compartment), FUN=mean)
+colnames(df_melt_aggreg_mean)<-c("Group", "Genus","Compartment", "Abundance")
+colnames(df_melt_aggreg_mean)
+
+df_melt_aggreg_sd=aggregate(df_melt_aggreg2$Abundance, by=list(Group=df_melt_aggreg2$Group, 
+                                                               Genus=df_melt_aggreg2$Genus,
+                                                               Compartment=df_melt_aggreg2$Compartment), FUN=sd)
+colnames(df_melt_aggreg_sd)=c("Group", "Genus","Compartment","sd")
+
+all(df_melt_aggreg_mean$Group==df_melt_aggreg_sd$Group)
+all(df_melt_aggreg_mean$Genus==df_melt_aggreg_sd$Genus)
+
+df_melt_aggreg_mean$sd=df_melt_aggreg_sd$sd 
+
+media_sd_genus_todos=df_melt_aggreg_mean
+
+#b.1) Endosphere
+media_sd_genus_endo=media_sd_genus_todos[media_sd_genus_todos[,"Compartment"] == "Endosphere",]
+
+media_sd_genus_endo$Genus=as.character(media_sd_genus_endo$Genus)
+unclassified_e=media_sd_genus_endo[media_sd_genus_endo[,"Genus"] == "unclassified",] 
+media_sd_genus_endo=media_sd_genus_endo[media_sd_genus_endo[,"Genus"] != "unclassified",] 
+media_sd_genus_endo$Genus[media_sd_genus_endo$Abundance <= 3] = "Other genera (<1%)" 
+media_sd_genus_endo$Genus=as.factor(media_sd_genus_endo$Genus)
+
+others_e=media_sd_genus_endo[media_sd_genus_endo[,"Genus"] == "Other genera (<1%)",]
+media_sd_genus_endo=media_sd_genus_endo[media_sd_genus_endo[,"Genus"] != "Other genera (<1%)",]
+
+ordenado_e=media_sd_genus_endo[order(media_sd_genus_endo$Abundance, decreasing=T),] 
+ordenado_e=rbind(ordenado_e,others_e,unclassified_e)
+
+group_label_endo=c("ASH\n(Spring)","ASH\n(Summer)", "BSD\n(Spring)","BSD\n(Summer)",
+                   "NSH\n(Spring)","NSH\n(Summer)","NSD\n(Spring)","NSD\n(Summer)")
+levels_endo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+limits_endo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+genus_name_ordered_e=as.vector(ordenado_e$Genus)
+nombres_unicos_e=unique(genus_name_ordered_e)
+ordenado_e$Genus=reorder.factor(ordenado_e$Genus,new.order=rev(nombres_unicos_e))
+
+lab_unicos_e=nombres_unicos_e 
+
+sorted_labels_ggplot_e<- sapply(lab_unicos_e,
+                                function(x) if (x == "Other genera (<1%)"|x == "unclassified"|x == "Other genera (<1%)")
+                                {parse(text=paste0("'", as.character(x), "'"))} else {parse(text = paste0("italic('",as.character(x), "')"))})
+
+colores_e=c("violet","firebrick","orange","coral2","#FB9A99",
+            "steelblue4","springgreen", "deepskyblue","#9933FF","#00CC00",
+            "mediumorchid2", "grey","black")
+
+length(lab_unicos_e)==length(colores_e)
+length(lab_unicos_e)
+length(colores_e)
+
+titulo_plot_e="Endosphere"
+
+pgenus_e=ggplot(ordenado_e, aes(x=Group, y=Abundance, fill=Genus, order=Genus)) + geom_bar(stat="identity", position="stack")+
+  scale_fill_manual(values=colores_e,
+                    labels=sorted_labels_ggplot_e,
+                    breaks=nombres_unicos_e)+
+  labs(y="Mean relative abundance (%)", x=NULL, fill="Genus",title=titulo_plot_e)+
+  guides(fill = guide_legend(reverse = TRUE))+
+  scale_x_discrete(limits=limits_endo,labels=group_label_endo,
+                   breaks=levels_endo)+
+  scale_y_continuous(expand=c(0.01,0.01),
+                     breaks=c(0,10,20,30,40,50,60,70,80,90,100),
+                     labels=c("0","10", "20","30","40","50","60","70","80","90","100"),
+                     limits = c(NA, 100))+
+  theme_bw()+
+  theme(panel.border = element_rect(colour="black"))+
+  theme(axis.title.x=element_blank())+
+  theme(plot.title = element_text(face="bold", hjust = 0.5, size=7))+
+  theme(axis.text = element_text(size = 7))+
+  theme(axis.text.x = element_text(face="bold", size=7))+
+  theme(axis.title.y = element_text(size = 7))+
+  theme(legend.key.size = unit(0.2, "cm"))+
+  theme(legend.text = element_text(size = 5))+
+  theme(legend.title = element_text(size=5, face="bold"))+
+  theme(legend.title.align=0)+
+  theme(legend.text.align = 0)+ 
+  theme(legend.position = "bottom")
+
+x11()
+pgenus_e
+ggsave("Genus_barrasapiladas_endo_ITS.tiff", pgenus_e,width = 100, height = 60, units = "mm", dpi = 800 )
+ggsave("Genus_barrasapiladas_endo_leyenda_ITS.tiff", pgenus_e,width = 170, height = 60, units = "mm", dpi = 800 )
+
+#b.2) Rhizosphere
+media_sd_genus_rizo=media_sd_genus_todos[media_sd_genus_todos[,"Compartment"] == "Rhizosphere",]
+
+
+media_sd_genus_rizo$Genus=as.character(media_sd_genus_rizo$Genus)
+unclassified_r=media_sd_genus_rizo[media_sd_genus_rizo[,"Genus"] == "unclassified",]
+media_sd_genus_rizo=media_sd_genus_rizo[media_sd_genus_rizo[,"Genus"] != "unclassified",]
+media_sd_genus_rizo$Genus[media_sd_genus_rizo$Abundance <= 2] = "Other genera (<2%)" 
+media_sd_genus_rizo$Genus=as.factor(media_sd_genus_rizo$Genus)
+
+others_r=media_sd_genus_rizo[media_sd_genus_rizo[,"Genus"] == "Other genera (<2%)",]
+media_sd_genus_rizo=media_sd_genus_rizo[media_sd_genus_rizo[,"Genus"] != "Other genera (<2%)",]
+
+ordenado_r=media_sd_genus_rizo[order(media_sd_genus_rizo$Abundance, decreasing=T),]
+ordenado_r=rbind(ordenado_r,others_r,unclassified_r)
+
+group_label_rizo=c("ASH\n(Spring)","ASH\n(Summer)", "BSD\n(Spring)","BSD\n(Summer)",
+                   "NSH\n(Spring)","NSH\n(Summer)","NSD\n(Spring)","NSD\n(Summer)")
+levels_rizo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+limits_rizo=c("Almijara_Spring_Asymptomatic","Almijara_Summer_Asymptomatic","Baza_Spring_Symptomatic","Baza_Summer_Symptomatic",
+              "SierraNevada_Spring_Asymptomatic","SierraNevada_Summer_Asymptomatic","SierraNevada_Spring_Symptomatic","SierraNevada_Summer_Symptomatic")
+
+genus_name_ordered_r=as.vector(ordenado_r$Genus)
+nombres_unicos_r=unique(genus_name_ordered_r)
+
+ordenado_r$Genus=reorder.factor(ordenado_r$Genus,new.order=rev(nombres_unicos_r))
+lab_unicos_r=nombres_unicos_r 
+
+sorted_labels_ggplot_r <- sapply(lab_unicos_r,
+                                 function(x) if (x == "Other genera (<2%)"|x == "unclassified"|x == "Other genera (<2%)")
+                                 {parse(text=paste0("'", as.character(x), "'"))} else {parse(text = paste0("italic('",as.character(x), "')"))})
+
+colores_r = c("cornflowerblue","deeppink3","khaki2","springgreen","darkolivegreen1",
+              "coral","deepskyblue","#00FFFF","#6A3D9A","#00CC00",
+              "aquamarine4","red","magenta","burlywood4","brown",
+              "pink", "cornsilk","darkblue","goldenrod","darkmagenta",
+              "yellow","bisque2","palegreen4","aquamarine","grey21","firebrick","violetred2",
+            "grey","black")
+
+length(lab_unicos_r)==length(colores_r) 
+length(lab_unicos_r)
+length(colores_r)
+
+titulo_plot_r="Rhizosphere"
+
+pgenus_r=ggplot(ordenado_r, aes(x=Group, y=Abundance, fill=Genus, order=Genus)) + geom_bar(stat="identity", position="stack")+
+  scale_fill_manual(values=colores_r,
+                    labels=sorted_labels_ggplot_r,
+                    breaks=nombres_unicos_r)+
+  labs(y="Mean relative abundance (%)", x=NULL, fill="Genus",title=titulo_plot_r)+
+  guides(fill = guide_legend(reverse = TRUE))+
+  scale_x_discrete(limits=limits_rizo,labels=group_label_rizo,
+                   breaks=levels_rizo)+
+  scale_y_continuous(expand=c(0.01,0.01),
+                     breaks=c(0,10,20,30,40,50,60,70,80,90,100),
+                     labels=c("0","10", "20","30","40","50","60","70","80","90","100"),
+                     limits = c(NA, 100))+
+  theme_bw()+
+  theme(panel.border = element_rect(colour="black"))+
+  theme(axis.title.x=element_blank())+
+  theme(plot.title = element_text(face="bold", hjust = 0.5, size=7))+
+  theme(axis.text = element_text(size = 7))+
+  theme(axis.text.x = element_text(face="bold", size=7))+
+  theme(axis.title.y = element_text(size = 7))+
+  theme(legend.key.size = unit(0.2, "cm"))+
+  theme(legend.text = element_text(size = 5))+
+  theme(legend.title = element_text(size=5, face="bold"))+
+  theme(legend.title.align=0)+
+  theme(legend.text.align = 0)+ 
+  theme(legend.position = "bottom")
+
+x11()
+pgenus_r
+ggsave("Genus_barrasapiladas_rizo_ITS.tiff", pgenus_r,width = 100, height = 60, units = "mm", dpi = 800 )
+ggsave("Genus_barrasapiladas_rizo_leyenda_ITS.tiff", pgenus_r,width = 170, height = 60, units = "mm", dpi = 800 )
+```
